@@ -2,7 +2,9 @@ import { Canvas } from '@react-three/fiber'
 import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
 import Court from './Court'
 import Net from './Net'
-import Volleyball from './Volleyball'
+import ModakBall from '../ModakBall'
+import Mushak from '../Mushak'
+import { BALL_HEIGHT } from '../constants/court'
 
 function Lights() {
   return (
@@ -44,7 +46,19 @@ export default function GameScene() {
       <Environment preset="sunset" environmentIntensity={0.18} />
       <Court />
       <Net />
-      <Volleyball />
+      <ModakBall position={[0, BALL_HEIGHT, 0]} />
+      {/* Player Mushak (grounded on court, facing the net) */}
+      <Mushak
+        variant="player"
+        position={[0, 0.08, 4.2]}
+        rotation={[0, Math.PI, 0]}
+      />
+      {/* Opponent Mushak (grounded on court, facing the net) */}
+      <Mushak
+        variant="opponent"
+        position={[0, 0.08, -4.2]}
+        rotation={[0, 0, 0]}
+      />
       <ContactShadows
         position={[0, -0.18, 0]}
         opacity={0.38}
