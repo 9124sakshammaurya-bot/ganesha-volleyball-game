@@ -1,0 +1,102 @@
+# Implementation Plan: Phases 3-6 (Movement, Ball Physics, Hitting, Court Boundaries)
+
+Implement arcade-style player movement, custom per-frame ball physics, contextual space-bar hitting, net collision, and court boundaries using React Three Fiber (`useFrame`) and Three.js math, without external physics engines like Rapier or Cannon.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Court Axis Orientation**:
+> - In our 3D court, the net is positioned along the X-axis at **`Z = 0`** (`NET_HEIGHT = 2.24`, `NET_WIDTH = 9.5`).
+> - The **Player's court** is at `Z > 0` (`Z = 0.7` near net to `Z = 8.4` back line; `X = -4.0` to `+4.0`).
+> - The **Opponent's court** is at `Z < 0` (`Z = -0.7` near net to `Z = -8.4` back line; `X = -4.0` to `+4.0`).
+> - **Controls**:
+>   - `A` / `D` or `ArrowLeft` / `ArrowRight`: Smooth lateral movement across court width (X-axis).
+>   - `W` / `S` or `ArrowUp` / `ArrowDown`: Forward / backward movement across court length (Z-axis).
+>   - `Space`: Contextual hit / jump. If within ball hit radius (`<= 1.8m`), smashes the Modak toward the opponent's court over the net; otherwise, triggers a vertical jump (with double-jump prevention).
+>   - `R`: Quick reset ball to serve position for easy testing.
+> - **Boundary Limits**: Player cannot cross the net (`Z >= 0.7` strictly enforced) or leave the court lines.
+
+> [!WARNING]
+> **Browser Automation Notice**:
+> - During automated verification, the `open_browser_url` tool encountered an external network error (Playwright win32 driver CDN returned HTTP 404). As per system instructions, please confirm if you would like us to proceed with terminal verification (`npm run build` and syntax validation) while you test the game interactively in your local browser at `http://localhost:5173`.
+
+---
+
+## Proposed Changes
+
+### 1. Game & Court Physics Constants
+#### [NEW] [constants.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/constants.js)
+Define clean, tuned arcade game constants:
+- Floor level: `FLOOR_Y = 0.08`
+- Net position: `NET_Z = 0`, `NET_HEIGHT = 2.24`, `NET_THICKNESS = 0.25`
+- Ball dimensions & restitution: `BALL_RADIUS = 0.42`, `BOUNCE_RESTITUTION = 0.76`
+- Physics: `GRAVITY = -16.0`
+- Player: `MOVE_SPEED = 7.2`, `JUMP_IMPULSE = 7.8`
+- Hit mechanics: `HIT_RADIUS = 1.8`, `HIT_IMPULSE_Y = 9.2`, `HIT_IMPULSE_Z = -11.5` (calibrated to smoothly clear 2.24m net)
+- Player bounds: `minX: -4.0`, `maxX: 4.0`, `minZ: 0.7`, `maxZ: 8.4`
+- Ball bounds: `minX: -4.3`, `maxX: 4.3`, `minZ: -8.8`, `maxZ: 8.8`
+
+---
+
+### 2. Keyboard Input System
+#### [NEW] [useKeyboardControls.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/useKeyboardControls.js)
+- Responsive keyboard event listener tracking active keys:
+  - Movement: `KeyA`, `KeyD`, `KeyW`, `KeyS`, `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`.
+  - Actions: `Space` (hit/jump triggered once per press), `KeyR` (reset ball).
+- Clean event listener cleanup on unmount.
+
+---
+
+### 3. Game Controller (Loop, Physics, Hit Detection, Net Collision)
+#### [NEW] [GameController.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameController.jsx)
+Lightweight React Three Fiber component executing inside the `<Canvas>` via `useFrame`:
+- **Player Movement**:
+  - Updates player X and Z based on directional input and `MOVE_SPEED`.
+  - Clamps player position strictly to `PLAYER_BOUNDS` (cannot cross `Z = 0.7` towards net).
+  - Handles vertical jump velocity, gravity, and ground landing at `FLOOR_Y` (prevents double-jumping).
+  - Applies subtle tilt/banking animation during movement.
+- **Contextual Space Bar Hit**:
+  - When Space is triggered, calculates Euclidean distance between Player Mushak and Modak Ball.
+  - If `distance <= HIT_RADIUS`:
+    - Launches ball: upward impulse `vy = 9.2`, forward impulse towards opponent `vz = -11.5`, plus lateral aim angle `vx = (ball.x - player.x) * 2.8`.
+    - Gives a small smash leap to the player Mushak.
+  - If `distance > HIT_RADIUS`:
+    - Executes regular vertical jump if grounded.
+- **Arcade Ball Physics**:
+  - Applies constant `GRAVITY` to ball vertical velocity `vy`.
+  - Integrates position: `pos += vel * delta`.
+  - **Ground bounce**: Inverts `vy` with damping `BOUNCE_RESTITUTION` when `ball.y - BALL_RADIUS <= FLOOR_Y`.
+  - **Net collision**: If `ball.y < NET_HEIGHT` and ball reaches `|ball.z| <= BALL_RADIUS`, inverts horizontal `vz` with restitution, preventing net clipping.
+  - **Court boundary walls**: Inverts velocity if ball hits outer bounds (`|X| >= 4.3` or `|Z| >= 8.8`) to keep ball in play for testing.
+  - **Modak Spin**: Applies realistic rolling and tumbling rotation to the Modak Ball based on velocity.
+- **Reset functionality**:
+  - Pressing `R` softly drops the ball in front of the player (`[0, 3.2, 3.2]`) with zero velocity.
+
+---
+
+### 4. Scene Integration & HUD
+#### [MODIFY] [GameScene.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameScene.jsx)
+- Pass `ref`s to `<Mushak variant="player" />` and `<ModakBall />`.
+- Mount `<GameController playerRef={playerRef} ballRef={ballRef} />` inside `<Canvas>`.
+- Keep existing court, net, lighting, materials, and opponent Mushak untouched.
+
+#### [MODIFY] [Hud.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/Hud.jsx)
+- Add sleek, unobtrusive control hint banner at the bottom or top of the HUD:
+  - `Controls: [A][D] or [←][→] Move · [W][S] or [↑][↓] Court · [SPACE] Jump / Hit · [R] Reset Modak`
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run `npm run build` to verify clean Vite compilation without syntax or bundling errors.
+
+### Interactive Verification
+- Verify running server at `http://localhost:5173`.
+- Test movement:
+  - Press A/D and Left/Right arrows: verify player moves smoothly left/right.
+  - Press W/S and Up/Down arrows: verify player moves forward/backward and stops at the net line (`Z = 0.7`).
+  - Press Space away from ball: verify player jumps up, lands cleanly on the floor, and cannot double-jump in mid-air.
+  - Press Space near the Modak Ball: verify the ball gets hit upward and cleanly arches over the 2.24m net into the opponent's court.
+  - Watch ball bounce off the ground with restitution and bounce off the net if below net height.
+  - Press `R` to reset the ball.

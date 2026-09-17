@@ -1,10 +1,12 @@
+import { useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
 import Court from './Court'
 import Net from './Net'
 import ModakBall from '../ModakBall'
 import Mushak from '../Mushak'
-import { BALL_HEIGHT } from '../constants/court'
+import GameController from './GameController'
+import { BALL_INITIAL_POS, PLAYER_INITIAL_POS } from '../game/constants'
 
 function Lights() {
   return (
@@ -31,7 +33,19 @@ function Lights() {
   )
 }
 
-export default function GameScene() {
+export default function GameScene({
+  matchState = 'playing',
+  playerScore = 0,
+  difficulty = 'medium',
+  concedingSide = 'player',
+  roundId = 0,
+  onBallGrounded,
+  onResetMatch,
+}) {
+  const playerRef = useRef()
+  const opponentRef = useRef()
+  const ballRef = useRef()
+
   return (
     <Canvas
       className="game-canvas"
@@ -46,19 +60,40 @@ export default function GameScene() {
       <Environment preset="sunset" environmentIntensity={0.18} />
       <Court />
       <Net />
-      <ModakBall position={[0, BALL_HEIGHT, 0]} />
-      {/* Player Mushak (grounded on court, facing the net) */}
+
+      {/* Physics, AI, and Gameplay Loop Controller */}
+      <GameController
+        playerRef={playerRef}
+        opponentRef={opponentRef}
+        ballRef={ballRef}
+        matchState={matchState}
+        playerScore={playerScore}
+        difficulty={difficulty}
+        concedingSide={concedingSide}
+        roundId={roundId}
+        onBallGrounded={onBallGrounded}
+        onResetMatch={onResetMatch}
+      />
+
+      {/* Modak Ball (Dynamic arcade physics) */}
+      <ModakBall ref={ballRef} position={BALL_INITIAL_POS} />
+
+      {/* Player Mushak (controlled via A/D, W/S, Arrows & Space) */}
       <Mushak
+        ref={playerRef}
         variant="player"
-        position={[0, 0.08, 4.2]}
+        position={PLAYER_INITIAL_POS}
         rotation={[0, Math.PI, 0]}
       />
-      {/* Opponent Mushak (grounded on court, facing the net) */}
+
+      {/* Opponent Mushak (guided by Computer AI) */}
       <Mushak
+        ref={opponentRef}
         variant="opponent"
         position={[0, 0.08, -4.2]}
         rotation={[0, 0, 0]}
       />
+
       <ContactShadows
         position={[0, -0.18, 0]}
         opacity={0.38}
@@ -78,3 +113,5 @@ export default function GameScene() {
     </Canvas>
   )
 }
+
+

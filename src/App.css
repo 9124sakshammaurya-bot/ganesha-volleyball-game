@@ -1,10 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Outfit:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Outfit:wght@500;600;700;800&display=swap');
 
 .app {
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  user-select: none;
 }
 
 .game-canvas {
@@ -13,23 +14,26 @@
   height: 100%;
 }
 
+/* ==========================================
+   HEADS-UP DISPLAY (HUD)
+   ========================================== */
 .hud {
   position: absolute;
-  top: 18px;
+  top: 14px;
   left: 50%;
-  z-index: 2;
+  z-index: 10;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   pointer-events: none;
 }
 
 .hud-title {
   margin: 0;
   font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
-  font-size: clamp(18px, 2.4vw, 28px);
+  font-size: clamp(18px, 2.4vw, 26px);
   font-weight: 800;
   letter-spacing: 0.18em;
   color: #ffe7b0;
@@ -38,16 +42,17 @@
     0 8px 18px rgba(0, 0, 0, 0.4);
 }
 
+/* --- SCOREBOARD --- */
 .scoreboard {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 18px;
-  min-width: min(520px, 86vw);
-  padding: 10px 22px;
+  min-width: min(500px, 88vw);
+  padding: 8px 24px;
   border: 2px solid #f6d48a;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(92, 28, 18, 0.88), rgba(38, 12, 28, 0.9));
+  background: linear-gradient(180deg, rgba(84, 24, 18, 0.92), rgba(34, 10, 26, 0.94));
   box-shadow:
     0 10px 24px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
@@ -55,21 +60,335 @@
 
 .score-side {
   font-family: Outfit, 'Segoe UI', sans-serif;
-  font-size: clamp(12px, 1.6vw, 15px);
+  font-size: clamp(12px, 1.5vw, 15px);
   font-weight: 700;
   letter-spacing: 0.16em;
-  color: #ffe9c4;
 }
 
-.score-side:last-child {
+.player-side {
+  color: #fed7aa;
+}
+
+.opponent-side {
   text-align: right;
+  color: #99f6e4;
+}
+
+.score-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
 }
 
 .score-value {
   font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
-  font-size: clamp(24px, 3.4vw, 34px);
+  font-size: clamp(24px, 3.2vw, 36px);
   font-weight: 800;
-  line-height: 1;
   color: #fff8e7;
   text-shadow: 0 2px 0 #9a3412;
+}
+
+.score-sub {
+  font-family: Outfit, sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #fcd34d;
+  margin-top: 2px;
+}
+
+/* --- DIFFICULTY SELECTOR BAR --- */
+.difficulty-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(22, 8, 26, 0.85);
+  border: 1px solid rgba(246, 212, 138, 0.28);
+  border-radius: 999px;
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.diff-label {
+  font-family: Outfit, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #f6d48a;
+  margin-right: 4px;
+}
+
+.diff-btn {
+  padding: 3px 11px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  font-family: Outfit, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #e5e7eb;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.diff-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(246, 212, 138, 0.5);
+}
+
+.diff-btn.active {
+  background: linear-gradient(135deg, #ea580c, #c2410c);
+  border-color: #fde047;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(234, 88, 12, 0.55);
+}
+
+/* --- ROUND TOAST ANNOUNCEMENT --- */
+.round-toast {
+  padding: 8px 24px;
+  border-radius: 999px;
+  font-family: 'Baloo 2', Outfit, sans-serif;
+  font-size: clamp(16px, 2.2vw, 22px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  animation: toastBounce 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast-player {
+  background: linear-gradient(135deg, #ea580c, #9a3412);
+  border: 2px solid #fed7aa;
+}
+
+.toast-opponent {
+  background: linear-gradient(135deg, #0d9488, #115e59);
+  border: 2px solid #99f6e4;
+}
+
+.toast-neutral {
+  background: linear-gradient(135deg, #854d0e, #451a03);
+  border: 2px solid #fef08a;
+}
+
+@keyframes toastBounce {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- CONTROLS QUICK REFERENCE --- */
+.hud-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  max-width: 90vw;
+  margin-top: 2px;
+}
+
+.control-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(30, 10, 32, 0.72);
+  border: 1px solid rgba(246, 212, 138, 0.35);
+  border-radius: 999px;
+  font-family: Outfit, sans-serif;
+  font-size: clamp(11px, 1.2vw, 13px);
+  font-weight: 600;
+  color: #faeccd;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.control-highlight {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.85), rgba(180, 40, 16, 0.85));
+  border-color: #fcd34d;
+  color: #fffaf0;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.4);
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  font-family: monospace;
+  font-size: 0.9em;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ==========================================
+   MATCH OVER / VICTORY MODAL OVERLAY
+   ========================================== */
+.game-over-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 8, 24, 0.78);
+  backdrop-filter: blur(12px);
+  animation: overlayFadeIn 0.3s ease;
+}
+
+.game-over-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  width: min(460px, 88vw);
+  padding: 32px 28px;
+  background: linear-gradient(180deg, #3d1424 0%, #200d1e 100%);
+  border: 2px solid #f6d48a;
+  border-radius: 28px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: modalScaleUp 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modal-badge {
+  font-family: Outfit, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: #fcd34d;
+}
+
+.game-over-title {
+  margin: 0;
+  font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
+  font-size: clamp(26px, 4vw, 36px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.08em;
+}
+
+.title-win {
+  color: #ffedd5;
+  text-shadow: 0 3px 0 #ea580c, 0 8px 24px rgba(234, 88, 12, 0.6);
+}
+
+.title-lose {
+  color: #e0e7ff;
+  text-shadow: 0 3px 0 #0d9488, 0 8px 24px rgba(13, 148, 136, 0.6);
+}
+
+.game-over-subtitle {
+  margin: 0;
+  font-family: Outfit, sans-serif;
+  font-size: clamp(13px, 1.6vw, 15px);
+  color: #fed7aa;
+  opacity: 0.9;
+  max-width: 340px;
+}
+
+.final-score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 24px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(246, 212, 138, 0.3);
+  border-radius: 16px;
+  margin: 6px 0;
+}
+
+.final-score-label {
+  font-family: Outfit, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #fcd34d;
+}
+
+.final-score-digits {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 38px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.player-digit {
+  color: #fb923c;
+}
+
+.opponent-digit {
+  color: #2dd4bf;
+}
+
+.colon {
+  color: #fff;
+  opacity: 0.5;
+}
+
+.play-again-btn {
+  margin-top: 8px;
+  padding: 12px 36px;
+  font-family: 'Baloo 2', Outfit, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #fff;
+  background: linear-gradient(135deg, #ea580c 0%, #b42810 100%);
+  border: 2px solid #fef08a;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow:
+    0 10px 24px rgba(234, 88, 12, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.play-again-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow:
+    0 14px 30px rgba(234, 88, 12, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.play-again-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalScaleUp {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }

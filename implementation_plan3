@@ -1,0 +1,122 @@
+# Implementation Plan: Phases 7 & 8 (Computer AI, Game Loop, Progressive Difficulty & Score UI)
+
+Implement an arcade-style Computer AI opponent for the teal Mushak, difficulty profiles with progressive scaling, a complete match game loop (point detection, round pause/serve reset, first-to-5 win condition), and an arcade 2D HUD overlay with score, difficulty selector, and Play Again screen.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Match Rules & Scoring**:
+> - **Target Score**: First to 5 points wins the match.
+> - **Point Trigger**: When the Modak Ball touches the floor on one half:
+>   - Lands on Player half (`z > 0`): Point awarded to Computer.
+>   - Lands on Opponent half (`z < 0`): Point awarded to Player.
+> - **Round Reset**: On point scored, the game pauses for ~1.4 seconds with a point banner, then resets player and AI positions to baseline and drops the Modak toward the side that conceded the point.
+> - **Progressive Difficulty**: AI difficulty preset (Easy, Medium, Hard) scales up dynamically (+5% reaction/speed per player point won) to ensure matches remain competitive.
+
+---
+
+## Proposed Changes
+
+### 1. Difficulty Configuration & Presets
+#### [NEW] [difficulty.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/difficulty.js)
+Define difficulty profiles:
+- `EASY`:
+  - `speed`: 4.6
+  - `reactionLerp`: 4.0 (gentle delay)
+  - `errorMargin`: 0.40 (occasional miscalculation)
+  - `jumpThresholdY`: 2.2
+- `MEDIUM` (Default):
+  - `speed`: 6.2
+  - `reactionLerp`: 7.5
+  - `errorMargin`: 0.18
+  - `jumpThresholdY`: 2.5
+- `HARD`:
+  - `speed`: 8.0
+  - `reactionLerp`: 12.0 (sharp reactions)
+  - `errorMargin`: 0.05
+  - `jumpThresholdY`: 2.7
+- Dynamic scaling function `getScaledAIDifficulty(preset, playerScore)` adding +5% speed and responsiveness per player point won.
+
+---
+
+### 2. Opponent AI Tracking & Hitting Logic
+#### [NEW] [useOpponentAI.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/useOpponentAI.js)
+AI behavior running in `useFrame`:
+- **Tracking**:
+  - When Modak is in or traveling toward opponent half (`ball.z < 0` or `ball.vz < -0.5`), the AI tracks the ball's X and anticipated Z landing spot using lerp and difficulty error margin.
+  - When Modak is safely on player's half, AI smoothly recovers toward its home center position `[0, FLOOR_Y, -4.2]`.
+  - Enforces `OPPONENT_BOUNDS`: `minX: -4.0, maxX: 4.0, minZ: -8.4, maxZ: -0.68` (strictly prevented from passing through the net).
+- **Hit & Jump**:
+  - When distance between Opponent Mushak and Modak Ball is `<= HIT_RADIUS` and ball height is within playable strike zone (`ball.y <= jumpThresholdY`):
+    - Fires hit impulse directed back across the net into player's court: upward `vy = HIT_IMPULSE_Y (9.2)`, forward `vz = Math.abs(HIT_IMPULSE_Z) (+11.6)`.
+    - Imparts lateral aiming with slight randomized human-like variance based on difficulty.
+    - Triggers visual jump/smash hop for opponent Mushak.
+  - Opponent jump gravity & ground landing with no double-jumping.
+
+---
+
+### 3. Game State Machine & Round Loop
+#### [NEW] [useGameLoop.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/useGameLoop.js)
+Manage match state:
+- State variables:
+  - `playerScore`, `opponentScore` (first to 5 wins).
+  - `matchState`: `'playing' | 'scored' | 'serving' | 'gameOver'`.
+  - `roundMessage`: e.g. `"POINT FOR PLAYER!"`, `"POINT FOR COMPUTER!"`, `"SERVE!"`, `"MATCH POINT!"`.
+  - `winner`: `'player' | 'opponent' | null`.
+  - `difficulty`: `'easy' | 'medium' | 'hard'`.
+- Actions:
+  - `onBallGrounded(z)`: Detects which court half was hit; awards point; checks win condition.
+  - `resetMatch()`: Clears scores to 0-0 and restarts.
+  - `setDifficulty(level)`: Toggles AI difficulty profile.
+
+---
+
+### 4. Controller & Scene Integration
+#### [MODIFY] [GameController.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameController.jsx)
+- Accept `opponentRef` and game loop callbacks/state (`gameState`, `onBallGrounded`, `difficulty`).
+- Run AI updates inside `useFrame` using the active scaled difficulty profile.
+- Detect ground contact during `'playing'` state to notify `onBallGrounded`.
+- Freeze updates when `matchState === 'gameOver'` or pause during `'scored'`.
+- Handle serve reset: reset player to `[0, FLOOR_Y, 4.2]`, opponent to `[0, FLOOR_Y, -4.2]`, and drop Modak above the conceding side.
+
+#### [MODIFY] [GameScene.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameScene.jsx)
+- Create `opponentRef` and pass to `<Mushak ref={opponentRef} variant="opponent" ... />`.
+- Wire `GameController` with `playerRef`, `opponentRef`, `ballRef`, and game loop state.
+
+---
+
+### 5. Arcade 2D Match HUD & Win UI
+#### [MODIFY] [Hud.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/Hud.jsx)
+- Display live score badge: `PLAYER {playerScore} : {opponentScore} COMPUTER`.
+- Render difficulty selector toggle (`[Easy]`, `[Medium]`, `[Hard]`).
+- Show animated round announcement toasts (e.g. `"POINT FOR PLAYER!"`, `"SERVE!"`).
+- Display victory / game-over modal when `matchState === 'gameOver'`:
+  - Banner: `"VICTORY! YOU WIN!"` or `"GAME OVER! COMPUTER WINS!"`
+  - `"Play Again"` button to reset and start a fresh match.
+
+#### [MODIFY] [App.css](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/App.css)
+- Add CSS styling for difficulty toggle buttons, round announcement banners, and the game over modal dialog.
+
+#### [MODIFY] [App.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/App.jsx)
+- Mount `useGameLoop` and distribute state between `<Hud />` and `<GameScene />`.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run `npm run build` to verify clean compilation, zero syntax errors, and valid bundle generation.
+
+### Interactive Verification (http://localhost:5173)
+1. **AI Tracking & Hitting**:
+   - Hit Modak over the net: verify Opponent Mushak moves toward the ball, leaps/smashes it back over the net.
+   - Verify AI stays strictly within its own boundary and cannot cross the net (`Z <= -0.68`).
+2. **Point Detection & Scoring**:
+   - Let ball drop on Player side: Computer score increases by 1; round pause triggers; ball resets.
+   - Hit ball to land on Opponent side: Player score increases by 1; round pause triggers; ball resets.
+3. **Difficulty Profiles & Progressive Scaling**:
+   - Switch between Easy, Medium, Hard via the HUD buttons; verify AI movement speed changes.
+   - Win points against AI; verify AI becomes subtly quicker (+5% per player point).
+4. **Match Over & Play Again**:
+   - Reach 5 points; verify physics pauses, game-over modal appears with winner announcement.
+   - Click "Play Again"; verify scores reset to 0-0 and gameplay restarts smoothly.
