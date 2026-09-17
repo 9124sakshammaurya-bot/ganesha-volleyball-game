@@ -13,6 +13,7 @@ export function useKeyboardControls() {
     moveBackward: false,
     spaceTriggered: false,
     resetTriggered: false,
+    pauseTriggered: false,
   })
 
   useEffect(() => {
@@ -36,8 +37,12 @@ export function useKeyboardControls() {
         keys.spaceTriggered = true
       } else if (code === 'KeyR') {
         keys.resetTriggered = true
+      } else if (code === 'KeyP' || code === 'Escape') {
+        event.preventDefault()
+        keys.pauseTriggered = true
       }
     }
+
 
     const handleKeyUp = (event) => {
       const code = event.code

@@ -57,9 +57,68 @@ export const OPPONENT_BOUNDS = {
   maxZ: -0.68,                  // Cannot pass net towards player
 }
 
+// Court Playable Boundaries
+export const COURT_HALF_WIDTH = COURT_WIDTH / 2   // 4.5
+export const COURT_HALF_LENGTH = COURT_LENGTH / 2 // 9.0
+
+// Line contact tolerance (ball edge touching the boundary line is IN)
+export const IN_BOUNDS_TOLERANCE_X = COURT_HALF_WIDTH + BALL_RADIUS * 0.45 // ~4.69
+export const IN_BOUNDS_TOLERANCE_Z = COURT_HALF_LENGTH + BALL_RADIUS * 0.45 // ~9.19
+
+// Outer court deck boundaries (allows out-of-bounds landing on the wooden apron)
 export const BALL_BOUNDS = {
-  minX: -COURT_WIDTH / 2 + 0.2, // -4.3
-  maxX: COURT_WIDTH / 2 - 0.2,  //  4.3
-  minZ: -COURT_LENGTH / 2 + 0.2,// -8.8
-  maxZ: COURT_LENGTH / 2 - 0.2, //  8.8
+  minX: -6.6,
+  maxX: 6.6,
+  minZ: -11.0,
+  maxZ: 11.0,
 }
+
+// Match Options
+export const TARGET_SCORE_OPTIONS = [3, 5, 7, 11]
+export const DEFAULT_TARGET_SCORE = 5
+
+/**
+ * Calculates predicted landing position (X, Z) and time-to-impact when the ball hits the floor.
+ * Uses the ball's current position, velocity, and gravity equation: y(t) = y0 + vy*t + 0.5*g*t^2.
+ * Also accounts for net reflection if ball crosses net plane below NET_TOP_Y.
+ */
+export function predictLandingPoint(ballPos, ballVel, floorY = FLOOR_Y, gravity = GRAVITY) {
+  const targetY = floorY + BALL_RADIUS
+  const deltaY = ballPos.y - targetY
+
+  if (deltaY <= 0.01) {
+    return { x: ballPos.x, z: ballPos.z, timeToLand: 0, height: 0 }
+  }
+
+  // Solve quadratic: 0.5 * gravity * t^2 + ballVel.y * t + deltaY = 0
+  const disc = ballVel.y * ballVel.y - 2 * gravity * deltaY
+  if (disc < 0) {
+    return { x: ballPos.x, z: ballPos.z, timeToLand: 0, height: deltaY }
+  }
+
+  // Root for t > 0 with negative gravity
+  const t = (-ballVel.y - Math.sqrt(disc)) / gravity
+  const landX = ballPos.x + ballVel.x * t
+  let landZ = ballPos.z + ballVel.z * t
+
+  // Net reflection check along trajectory
+  if (Math.abs(ballVel.z) > 0.05) {
+    const tNet = -ballPos.z / ballVel.z
+    if (tNet > 0 && tNet < t) {
+      const yAtNet = ballPos.y + ballVel.y * tNet + 0.5 * gravity * tNet * tNet
+      if (yAtNet < NET_TOP_Y) {
+        // Will bounce off the net horizontally
+        const remainingTime = t - tNet
+        landZ = -ballVel.z * 0.72 * remainingTime
+      }
+    }
+  }
+
+  return {
+    x: landX,
+    z: landZ,
+    timeToLand: t,
+    height: deltaY,
+  }
+}
+

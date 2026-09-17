@@ -20,6 +20,7 @@ import {
   PLAYER_INITIAL_POS,
   PLAYER_JUMP_IMPULSE,
   PLAYER_SPEED,
+  predictLandingPoint,
 } from '../game/constants'
 import { useKeyboardControls } from '../game/useKeyboardControls'
 import { NET_WIDTH } from '../constants/court'
@@ -30,21 +31,25 @@ import { getScaledAIDifficulty } from '../game/difficulty'
  * Handles the complete arcade loop inside useFrame:
  * 1. Player controls (A/D, W/S, Arrows, Space to jump / hit)
  * 2. Opponent AI (proportional tracking, progressive difficulty, jump & hit impulse)
- * 3. Modak Ball arcade physics (gravity, ground bounce, net reflection, wall bounds)
- * 4. Ground hit detection & point scoring callback
- * 5. Round reset & serve positioning
+ * 3. Modak Ball arcade physics (gravity, ground bounce, net reflection, out-of-bounds limits)
+ * 4. Real-time landing reticle trajectory projection
+ * 5. Out-of-bounds & in-bounds ground hit detection with last-hitter attribution
+ * 6. Pause / Resume state management
  */
 export default function GameController({
   playerRef,
   opponentRef,
   ballRef,
+  reticleRef,
   matchState = 'playing',
+  isPaused = false,
   playerScore = 0,
   difficulty = 'medium',
   concedingSide = 'player',
   roundId = 0,
   onBallGrounded,
   onResetMatch,
+  onTogglePause,
 }) {
   const keysRef = useKeyboardControls()
 
@@ -62,12 +67,16 @@ export default function GameController({
   const ballPosRef = useRef(new Vector3(...BALL_INITIAL_POS))
   const ballVelRef = useRef(new Vector3(0, 0, 0))
 
+  // Track who last touched the Modak ('player' | 'opponent' | null)
+  const lastHitterRef = useRef(null)
+
   // Handle round resets (serves & new match)
   const lastRoundIdRef = useRef(roundId)
 
   useEffect(() => {
     if (roundId !== lastRoundIdRef.current) {
       lastRoundIdRef.current = roundId
+      lastHitterRef.current = null
 
       // Reset Player and Opponent coordinates
       playerPosRef.current.set(...PLAYER_INITIAL_POS)
@@ -99,25 +108,34 @@ export default function GameController({
   }, [roundId, concedingSide, playerRef, opponentRef, ballRef])
 
   useFrame((state, rawDelta) => {
+    const keys = keysRef.current
+
+    // Check pause key trigger (P / Esc)
+    if (keys.pauseTriggered) {
+      keys.pauseTriggered = false
+      onTogglePause?.()
+      return
+    }
+
+    // Freeze all physics and character updates when paused or game over
+    if (isPaused || matchState === 'gameOver' || matchState === 'scored') {
+      return
+    }
+
     // Clamp delta to prevent physics tunneling
     const delta = Math.min(rawDelta, 0.045)
-    const keys = keysRef.current
 
     const playerPos = playerPosRef.current
     const opponentPos = opponentPosRef.current
     const ballPos = ballPosRef.current
     const ballVel = ballVelRef.current
 
-    // If game is over or paused during point scored, halt physics updates
-    if (matchState === 'gameOver' || matchState === 'scored') {
-      return
-    }
-
     // ==========================================
     // 1. MANUAL RESET TRIGGER (Press 'R')
     // ==========================================
     if (keys.resetTriggered) {
       keys.resetTriggered = false
+      lastHitterRef.current = null
       if (onResetMatch) {
         onResetMatch()
       } else {
@@ -147,6 +165,9 @@ export default function GameController({
       const distToBall = Math.sqrt(dx * dx + dy * dy + dz * dz)
 
       if (distToBall <= HIT_RADIUS) {
+        // Mark player as last hitter
+        lastHitterRef.current = 'player'
+
         // Hit Modak upward and forward toward opponent court (Z < 0)
         ballVel.y = HIT_IMPULSE_Y
         ballVel.z = HIT_IMPULSE_Z
@@ -252,6 +273,9 @@ export default function GameController({
 
     // Trigger hit when ball is within strike radius and playable height
     if (aiDistToBall <= HIT_RADIUS && ballPos.y <= ai.jumpThresholdY && ballPos.z < 0.2) {
+      // Mark opponent as last hitter
+      lastHitterRef.current = 'opponent'
+
       // Hit Modak upward and forward toward player's court (Z > 0)
       ballVel.y = HIT_IMPULSE_Y
       ballVel.z = Math.abs(HIT_IMPULSE_Z) // Positive Z launch
@@ -290,15 +314,15 @@ export default function GameController({
     ballPos.y += ballVel.y * delta
     ballPos.z += ballVel.z * delta
 
-    // --- Ground Bounce & Point Scoring ---
+    // --- Ground Bounce & Point Scoring (In-Bounds vs Out-of-Bounds) ---
     const ballFloorLimit = FLOOR_Y + BALL_RADIUS
     if (ballPos.y <= ballFloorLimit) {
       ballPos.y = ballFloorLimit
 
-      // If in active play, report point scoring
+      // If in active play, report ground contact coordinates & who last hit it
       if (matchState === 'playing' && onBallGrounded) {
         ballVel.set(0, 0, 0)
-        onBallGrounded(ballPos.z)
+        onBallGrounded(ballPos.x, ballPos.z, lastHitterRef.current)
         return
       }
 
@@ -329,7 +353,7 @@ export default function GameController({
       }
     }
 
-    // --- Bounded Court Walls ---
+    // --- Outer Deck Walls (allows out-of-bounds ground landings) ---
     if (ballPos.x - BALL_RADIUS <= BALL_BOUNDS.minX) {
       ballPos.x = BALL_BOUNDS.minX + BALL_RADIUS
       ballVel.x = Math.abs(ballVel.x) * 0.78
@@ -351,6 +375,30 @@ export default function GameController({
       ballRef.current.position.set(ballPos.x, ballPos.y, ballPos.z)
       ballRef.current.rotation.x += ballVel.z * 1.5 * delta
       ballRef.current.rotation.z -= ballVel.x * 1.5 * delta
+    }
+
+    // ==========================================
+    // 6. REAL-TIME LANDING RETICLE PROJECTION
+    // ==========================================
+    if (reticleRef?.current) {
+      const pred = predictLandingPoint(ballPos, ballVel, FLOOR_Y, GRAVITY)
+      reticleRef.current.position.set(pred.x, FLOOR_Y + 0.015, pred.z)
+
+      // Dynamic scale & opacity based on ball height
+      const heightAboveFloor = Math.max(0, ballPos.y - ballFloorLimit)
+      const scale = 0.85 + Math.min(0.55, heightAboveFloor * 0.16)
+      reticleRef.current.scale.set(scale, scale, scale)
+
+      // Fade reticle if ball is already rolling on the ground
+      const targetOpacity = heightAboveFloor > 0.05
+        ? Math.min(0.95, 0.45 + (1.0 / (heightAboveFloor + 0.5)) * 0.45)
+        : 0.15
+
+      reticleRef.current.traverse((child) => {
+        if (child.isMesh && child.material) {
+          child.material.opacity = targetOpacity
+        }
+      })
     }
   })
 

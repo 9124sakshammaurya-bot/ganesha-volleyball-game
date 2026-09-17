@@ -7,15 +7,20 @@ function App() {
   const {
     playerScore,
     opponentScore,
+    targetScore,
     matchState,
+    isPaused,
     roundMessage,
     winner,
     difficulty,
     concedingSide,
     roundId,
     onBallGrounded,
-    resetMatch,
+    togglePause,
+    resumeGame,
+    restartMatch,
     setDifficulty,
+    setTargetScore,
   } = useGameLoop()
 
   return (
@@ -23,21 +28,28 @@ function App() {
       <Hud
         playerScore={playerScore}
         opponentScore={opponentScore}
+        targetScore={targetScore}
         matchState={matchState}
+        isPaused={isPaused}
         roundMessage={roundMessage}
         winner={winner}
         difficulty={difficulty}
         onSelectDifficulty={setDifficulty}
-        onResetMatch={resetMatch}
+        onSelectTargetScore={setTargetScore}
+        onTogglePause={togglePause}
+        onResumeGame={resumeGame}
+        onResetMatch={restartMatch}
       />
       <GameScene
         matchState={matchState}
+        isPaused={isPaused}
         playerScore={playerScore}
         difficulty={difficulty}
         concedingSide={concedingSide}
         roundId={roundId}
         onBallGrounded={onBallGrounded}
-        onResetMatch={resetMatch}
+        onResetMatch={restartMatch}
+        onTogglePause={togglePause}
       />
     </div>
   )

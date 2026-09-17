@@ -5,6 +5,7 @@ import Court from './Court'
 import Net from './Net'
 import ModakBall from '../ModakBall'
 import Mushak from '../Mushak'
+import LandingReticle from './LandingReticle'
 import GameController from './GameController'
 import { BALL_INITIAL_POS, PLAYER_INITIAL_POS } from '../game/constants'
 
@@ -35,16 +36,19 @@ function Lights() {
 
 export default function GameScene({
   matchState = 'playing',
+  isPaused = false,
   playerScore = 0,
   difficulty = 'medium',
   concedingSide = 'player',
   roundId = 0,
   onBallGrounded,
   onResetMatch,
+  onTogglePause,
 }) {
   const playerRef = useRef()
   const opponentRef = useRef()
   const ballRef = useRef()
+  const reticleRef = useRef()
 
   return (
     <Canvas
@@ -61,19 +65,26 @@ export default function GameScene({
       <Court />
       <Net />
 
-      {/* Physics, AI, and Gameplay Loop Controller */}
+      {/* Real-time Trajectory Landing Indicator on Court Floor */}
+      <LandingReticle ref={reticleRef} />
+
+      {/* Physics, AI, Reticle Projection, and Gameplay Loop Controller */}
       <GameController
         playerRef={playerRef}
         opponentRef={opponentRef}
         ballRef={ballRef}
+        reticleRef={reticleRef}
         matchState={matchState}
+        isPaused={isPaused}
         playerScore={playerScore}
         difficulty={difficulty}
         concedingSide={concedingSide}
         roundId={roundId}
         onBallGrounded={onBallGrounded}
         onResetMatch={onResetMatch}
+        onTogglePause={onTogglePause}
       />
+
 
       {/* Modak Ball (Dynamic arcade physics) */}
       <ModakBall ref={ballRef} position={BALL_INITIAL_POS} />

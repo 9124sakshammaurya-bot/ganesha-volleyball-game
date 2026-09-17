@@ -1,0 +1,102 @@
+# Implementation Plan: Landing Indicator, Out-of-Bounds Rules, Target Score & Pause Menu
+
+Refine gameplay accessibility and match rules for the Ganesha Volleyball Game with a real-time landing trajectory reticle on the court floor, realistic out-of-bounds point attribution, a configurable target score selector (3, 5, 7, 11), and a Pause/Resume system with modal overlay.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Key Gameplay Updates**:
+> 1. **Landing Indicator**: A dynamic reticle on the court floor ($Y = 0.09$) calculated in real-time via quadratic trajectory projection ($y(t) = y_0 + v_y t + \frac{1}{2}gt^2$). It sharpens, contracts, and increases in opacity as the ball nears the ground to provide depth and timing cues.
+> 2. **Out-of-Bounds Rule**: Tracks who last touched the Modak (`lastHitter: 'player' | 'opponent'`). If the ball lands outside court boundary lines ($|X| > 4.5$ or $|Z| > 9.0$):
+>    - If Player hit it out $\rightarrow$ Point to Computer.
+>    - If Computer hit it out $\rightarrow$ Point to Player.
+>    - Inside lines $\rightarrow$ Standard side-based point attribution.
+> 3. **Target Score Selector**: Choose between 3, 5, 7, or 11 points in the HUD.
+> 4. **Pause System**: Toggle with `P`, `Escape`, or the HUD Pause button. Freezes `useFrame` updates and opens a semi-transparent pause menu with Resume and Restart Match options.
+
+---
+
+## Proposed Changes
+
+### 1. Trajectory Projection & Landing Reticle Component
+#### [NEW] [LandingReticle.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/LandingReticle.jsx)
+- Renders directly on the court floor plane ($Y = FLOOR\_Y + 0.01$).
+- Visual design: Concentric glowing rings with a warm saffron/gold gradient and subtle pulse.
+- Accepts `position = [x, y, z]`, `scale`, and `opacity` updated per frame from the physics controller.
+
+---
+
+### 2. Game Constants & Trajectory Helper
+#### [MODIFY] [constants.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/constants.js)
+- Define `COURT_HALF_WIDTH = 4.5` and `COURT_HALF_LENGTH = 9.0`.
+- Define `TARGET_SCORE_OPTIONS = [3, 5, 7, 11]`.
+- Export a pure, lightweight trajectory prediction function `predictLandingPoint(ballPos, ballVel, floorY, gravity)` solving for time-to-impact and projected coordinates $(X_{land}, Z_{land})$.
+
+---
+
+### 3. Keyboard Input & Pause Controls
+#### [MODIFY] [useKeyboardControls.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/useKeyboardControls.js)
+- Intercept `KeyP` and `Escape` key events, triggering `pauseTriggered`.
+
+---
+
+### 4. Game Loop & Match State
+#### [MODIFY] [useGameLoop.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/useGameLoop.js)
+- Add `targetScore` state (default 5, configurable to 3, 5, 7, 11).
+- Add `isPaused` state with `togglePause()`, `resumeGame()`, and `restartMatch()`.
+- Expand `onBallGrounded(ballX, ballZ, lastHitter)`:
+  - Check in-bounds vs. out-of-bounds.
+  - Attribute point accordingly with appropriate round announcement (`"OUT! POINT FOR PLAYER!"`, `"OUT! POINT FOR COMPUTER!"`, etc.).
+  - Evaluate win condition against `targetScore`.
+
+---
+
+### 5. Controller Updates
+#### [MODIFY] [GameController.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameController.jsx)
+- Track `lastHitterRef` (`'player'` or `'opponent'`).
+- Compute real-time landing prediction each frame and update `reticleRef`.
+- Expand outer wall limits to allow out-of-bounds ground contacts on the court deck.
+- Pass `(ballX, ballZ, lastHitter)` to `onBallGrounded`.
+- Freeze all updates when `isPaused` is true.
+
+---
+
+### 6. Scene & UI HUD Integration
+#### [MODIFY] [GameScene.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameScene.jsx)
+- Mount `<LandingReticle ref={reticleRef} />` on the court floor.
+- Pass `isPaused` and `reticleRef` to `GameController`.
+
+#### [MODIFY] [Hud.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/Hud.jsx)
+- Add Target Score selector pills (`[3] [5] [7] [11]`).
+- Add Pause button (`⏸`).
+- Render Pause Modal when `isPaused` is true with "Resume" and "Restart Match" actions.
+- Update score subtitle to reflect active target score (`FIRST TO {targetScore}`).
+
+#### [MODIFY] [App.css](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/App.css)
+- Styling for target score selector, pause button, and pause modal overlay.
+
+#### [MODIFY] [App.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/App.jsx)
+- Distribute `targetScore`, `setTargetScore`, `isPaused`, `togglePause`, `resumeGame`, and `restartMatch` to `Hud` and `GameScene`.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run `npm run build` to verify clean Vite compilation with zero errors.
+
+### Interactive Verification (http://localhost:5173)
+1. **Landing Indicator**:
+   - Hit Modak into the air: observe the glowing landing reticle appearing on the court floor at the predicted landing coordinates.
+   - As the ball descends, observe the reticle contracting and brightening, providing clear timing for jumps and hits.
+2. **Out-of-Bounds**:
+   - Hit the ball wide or long beyond the boundary lines:
+     - When ball lands out on player's hit: verify "OUT! POINT FOR COMPUTER!" appears.
+     - When ball lands out on AI's hit: verify "OUT! POINT FOR PLAYER!" appears.
+   - When ball lands inside boundary lines: standard side attribution.
+3. **Target Score**:
+   - Change target score to 3 in HUD: verify match completes when either side reaches 3.
+4. **Pause / Resume**:
+   - Press `P` or `Escape` (or click Pause button in HUD): verify physics and Mushak animations freeze instantly, and Pause overlay appears.
+   - Click "Resume" (or press `P`/`Escape`): verify game unfreezes and resumes seamlessly.
+   - Click "Restart Match": verify scores reset to 0-0 and ball re-serves.
