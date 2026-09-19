@@ -9,31 +9,91 @@ export default function Hud({
   roundMessage = null,
   winner = null,
   difficulty = 'medium',
+  chargeState = { isCharging: false, power: 0 },
+  speedState = { speedMultiplier: 0.65, rallyHits: 0 },
+  playerProfile = null,
+  onOpenAuth,
+  onOpenLeaderboard,
   onSelectDifficulty,
   onSelectTargetScore,
   onTogglePause,
   onResumeGame,
   onResetMatch,
 }) {
+  const currentSpeed = speedState?.speedMultiplier || 0.65
+  const rallyHits = speedState?.rallyHits || 0
+  const isSpeedSpike = currentSpeed >= 1.15
+
   return (
     <>
       <div className="hud">
-        <p className="hud-title">MUSHAK VOLLEYBALL</p>
+        {/* Top Header Bar: Title, Player Chip & Leaderboard */}
+        <div className="hud-top-bar">
+          <div className="hud-title-container">
+            <p className="hud-title">MUSHAK VOLLEYBALL</p>
+          </div>
+
+          <div className="hud-meta-actions">
+            {/* Player Profile Chip */}
+            <button
+              type="button"
+              className="player-chip-btn"
+              onClick={onOpenAuth}
+              title="Click to change player profile"
+            >
+              <span className="player-chip-avatar">🐀</span>
+              <span className="player-chip-name">
+                {playerProfile?.username || 'Guest Player'}
+              </span>
+              <span className="player-chip-badge">Switch</span>
+            </button>
+
+            {/* Leaderboard Button */}
+            <button
+              type="button"
+              className="leaderboard-nav-btn"
+              onClick={onOpenLeaderboard}
+              title="View Hall of Fame Leaderboard"
+            >
+              🏆 LEADERBOARD
+            </button>
+          </div>
+        </div>
 
         {/* Scoreboard */}
         <div className="scoreboard" aria-label="Score">
-          <span className="score-side player-side">PLAYER</span>
+          <div className="score-side-container player-side">
+            <span className="score-side">
+              {playerProfile?.username ? playerProfile.username.toUpperCase() : 'PLAYER'}
+            </span>
+          </div>
+
           <div className="score-center">
             <span className="score-value">
               {playerScore} : {opponentScore}
             </span>
             <span className="score-sub">FIRST TO {targetScore}</span>
           </div>
-          <span className="score-side opponent-side">COMPUTER</span>
+
+          <div className="score-side-container opponent-side">
+            <span className="score-side">COMPUTER</span>
+          </div>
         </div>
 
         {/* Match Settings & Options Bar */}
         <div className="settings-bar" role="group" aria-label="Match Settings">
+          {/* Live Ball Speed Ramp Indicator */}
+          <div
+            className={`speed-ramp-badge ${isSpeedSpike ? 'speed-hot' : ''}`}
+            title="Ball speed ramps smoothly with each rally hit!"
+          >
+            <span className="speed-icon">{isSpeedSpike ? '🔥' : '⚡'}</span>
+            <span className="speed-text">SPEED: {currentSpeed.toFixed(2)}x</span>
+            {rallyHits > 0 && <span className="speed-hits">({rallyHits} hits)</span>}
+          </div>
+
+          <div className="settings-divider" />
+
           {/* Difficulty Selector Toggle */}
           <div className="setting-group" aria-label="AI Difficulty">
             <span className="setting-label">AI:</span>
@@ -94,16 +154,55 @@ export default function Hud({
           </div>
         )}
 
+        {/* Serve Power Charge Meter (active when holding space to serve) */}
+        {chargeState?.isCharging && (
+          <div
+            className="charge-meter-container"
+            role="progressbar"
+            aria-valuenow={Math.round(chargeState.power * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div className="charge-meter-header">
+              <span className="charge-label">SERVE POWER</span>
+              <span
+                className={`charge-tier-badge ${
+                  chargeState.power >= 0.75
+                    ? 'tier-smash'
+                    : chargeState.power >= 0.4
+                    ? 'tier-volley'
+                    : 'tier-lob'
+                }`}
+              >
+                {chargeState.power >= 0.75
+                  ? '⚡ DEEP DRIVE!'
+                  : chargeState.power >= 0.4
+                  ? 'MEDIUM SERVE'
+                  : 'SHORT SERVE'}
+              </span>
+            </div>
+            <div className="charge-meter-track">
+              <div
+                className={`charge-meter-fill ${chargeState.power >= 0.75 ? 'fill-max' : ''}`}
+                style={{ width: `${Math.max(6, Math.round(chargeState.power * 100))}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Controls Quick Reference */}
         <div className="hud-controls" aria-label="Game Controls">
           <span className="control-item">
-            <kbd>A</kbd><kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> Move
+            <kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> Move & Aim
           </span>
           <span className="control-item">
-            <kbd>W</kbd><kbd>S</kbd> or <kbd>↑</kbd><kbd>↓</kbd> Depth
+            <kbd>W</kbd><kbd>S</kbd> / <kbd>↑</kbd><kbd>↓</kbd> Court Depth
           </span>
           <span className="control-item control-highlight">
-            <kbd>SPACE</kbd> Jump / Hit Modak
+            <kbd>AUTO-HIT</kbd> Step into Landing Reticle to Hit!
+          </span>
+          <span className="control-item">
+            <kbd>SPACE</kbd> Serve / Jump
           </span>
           <span className="control-item">
             <kbd>P</kbd> Pause
@@ -146,6 +245,13 @@ export default function Hud({
               >
                 RESTART MATCH
               </button>
+              <button
+                type="button"
+                className="action-btn secondary-btn"
+                onClick={onOpenLeaderboard}
+              >
+                🏆 LEADERBOARD
+              </button>
             </div>
           </div>
         </div>
@@ -163,7 +269,7 @@ export default function Hud({
             </h2>
             <p className="game-over-subtitle">
               {winner === 'player'
-                ? 'Masterful volleying! The divine Modak is secured!'
+                ? `Masterful volleying, ${playerProfile?.username || 'Player'}! The divine Modak is secured!`
                 : 'A valiant effort! Computer Mushak takes the game.'}
             </p>
             <div className="final-score-box">
@@ -174,13 +280,22 @@ export default function Hud({
                 <span className="opponent-digit">{opponentScore}</span>
               </div>
             </div>
-            <button
-              type="button"
-              className="action-btn resume-btn"
-              onClick={() => onResetMatch?.()}
-            >
-              PLAY AGAIN
-            </button>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="action-btn resume-btn"
+                onClick={() => onResetMatch?.()}
+              >
+                PLAY AGAIN
+              </button>
+              <button
+                type="button"
+                className="action-btn secondary-btn"
+                onClick={onOpenLeaderboard}
+              >
+                🏆 VIEW LEADERBOARD
+              </button>
+            </div>
           </div>
         </div>
       )}

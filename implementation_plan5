@@ -1,0 +1,121 @@
+# Implementation Plan - Hitting Mechanics & Back-of-Court Serve Overhaul
+
+Overhaul the hitting mechanics, serving system, landing reticle trigger, Spacebar power charging, and visual feedback for the Ganesha Volleyball Game in React Three Fiber, making gameplay fluid and skill-based while preserving all visual style, court geometry, and 3D components.
+
+## Proposed Changes
+
+### 1. Game Constants & Trajectory Math
+#### [MODIFY] [constants.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/constants.js)
+- Add serve positions and parameters:
+  - `SERVE_PLAYER_POS = [0, 0.08, 7.6]` (back baseline)
+  - `SERVE_OPPONENT_POS = [0, 0.08, -7.6]` (back baseline)
+  - `SERVE_BALL_OFFSET_Z = 1.15` (spawn in front of server)
+  - `SERVE_BALL_HEIGHT = 1.45` (comfortable hit altitude)
+- Add charge & hit modulation constants:
+  - `MAX_CHARGE_TIME = 0.65` (seconds to reach 100% power, within 0.6–0.8s requirement)
+  - `MIN_HIT_POWER = 0.25` (soft lob / drop shot)
+  - `MAX_HIT_POWER = 1.0` (maximum smash / spike)
+  - `RETICLE_TRIGGER_RADIUS = 2.25` (active radius around predicted landing point)
+  - `PLAYABLE_HIT_MIN_Y = 0.45`, `PLAYABLE_HIT_MAX_Y = 3.9`
+- Trajectory helper function:
+  - Given hitter side, target (X, Z), power (0.25–1.0), and gravity, calculate the exact `(vx, vy, vz)` impulse that ensures the ball safely clears the net (`NET_TOP_Y + clearance`) and lands at the desired target court area.
+
+---
+
+### 2. Input System: Hold & Charge Detection
+#### [MODIFY] [useKeyboardControls.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/useKeyboardControls.js)
+- Enhance keyboard input capture:
+  - `spaceDown`: boolean flag indicating whether Space is actively being held down.
+  - `spacePressed`: trigger set true on keydown (consumed once per press).
+  - `spaceReleased`: trigger set true on keyup (signals power release).
+  - Handle browser default prevention for Spacebar consistently.
+
+---
+
+### 3. Match Loop & Round State Management
+#### [MODIFY] [useGameLoop.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/useGameLoop.js)
+- Track `serverSide` ('player' | 'opponent'):
+  - Initial round starts with `'player'` serving.
+  - After a point is scored, whoever won the point becomes the `serverSide`.
+- Revised Serve Phase:
+  - After score announcement toast, set `matchState = 'serving'` with `serverSide`.
+  - Announce "READY TO SERVE (HOLD SPACE)" for player serve, or "OPPONENT SERVING..." for AI serve.
+  - Remove the blind automatic timeout that forced `matchState = 'playing'`. Instead, the game stays in `'serving'` until the serve is actively triggered by the server.
+  - Add callback `onServeTriggered()` to switch `matchState = 'playing'`.
+
+---
+
+### 4. Game Controller: Serve, Reticle Trigger, Charge Power, & AI
+#### [MODIFY] [GameController.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameController.jsx)
+- **Back-of-the-Court Serve System**:
+  - In `serving` state:
+    - Server positioned at back boundary (`[0, FLOOR_Y, 7.6]` for player, `[0, FLOOR_Y, -7.6]` for opponent).
+    - Receiver positioned in mid-court ready stance.
+    - Modak ball floats/bobs comfortably in front of the server at hit height.
+    - If Player is serving: server can move laterally (A/D) to adjust serve angle; holding/releasing Space triggers the serve and transitions to `'playing'`.
+    - If Opponent is serving: AI delays naturally (~1.2s), winds up, and hits serve over net into player's court.
+- **Proximity-Based Auto-Aim & Landing Reticle Trigger**:
+  - Check if character is within predicted landing reticle radius (`distToReticle <= RETICLE_TRIGGER_RADIUS`) OR close to ball (`distToBall <= HIT_RADIUS`) while ball is within playable height (`PLAYABLE_HIT_MIN_Y <= ballPos.y <= PLAYABLE_HIT_MAX_Y`).
+  - Flag `inHitZone` computed each frame.
+  - When a hit is executed:
+    - Target calculation automatically aims over the net to opponent's court.
+    - Determines open space on the opponent's side: if opponent is on left (`x < 0`), aim right (`x > 0`), and vice versa.
+    - Incorporates player's directional steering (A/D keys) to allow aiming down-the-line or cross-court.
+    - Auto-aim math calculates `vx`, `vy`, `vz` ensuring no backward misfires and guaranteed net clearance.
+- **Spacebar Charge / Power Modulation**:
+  - If Space is pressed while **NOT** in hit zone (and not serving): executes a normal jump (`playerVelY = PLAYER_JUMP_IMPULSE`).
+  - If Space is pressed while **IN** hit zone (or serving):
+    - Starts charging impulse power: accumulates from `MIN_HIT_POWER` to `MAX_HIT_POWER` over `MAX_CHARGE_TIME` (0.65s).
+    - Automatically releases if held to maximum (0.65s).
+    - On release: executes the hit with the charged power:
+      - Low power (~0.25–0.4): Soft lob / drop shot that barely clears the net and lands short (opponent front court).
+      - High power (~0.8–1.0): Fast driving smash deep into the back court with a leap animation.
+      - Medium power (~0.5–0.7): Balanced volley.
+    - Communicates charge level to HUD via `onChargeChange(chargeRatio)` callback.
+- **AI Opponent Power Selection**:
+  - AI evaluates player's position:
+    - If player is deep (`playerPos.z > 5.5`), AI chooses low power drop shot to catch player off-guard.
+    - If player is near the net (`playerPos.z < 2.8`), AI chooses high power smash deep to baseline.
+    - Otherwise chooses balanced power with variance scaled by selected difficulty (Easy/Med/Hard).
+
+---
+
+### 5. Visual Feedback: Landing Reticle, Charge Meter HUD, & Smash Effects
+#### [MODIFY] [LandingReticle.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/LandingReticle.jsx)
+- Add active trigger zone visual state (`isActiveTrigger`):
+  - When player enters reticle radius during playable ball altitude, reticle rings transition from amber to radiant emerald/gold with pulsing glow and crosshairs.
+#### [MODIFY] [Hud.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/Hud.jsx) & [App.css](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/App.css)
+- Add arcade-style Power Charge Meter:
+  - Appears smoothly when charging.
+  - Color gradient dynamically fills from Green (soft lob) -> Yellow/Orange (volley) -> Glowing Neon Red/Gold (Smash!).
+  - Badge indicator: "SOFT LOB" -> "VOLLEY" -> "MAX SMASH!".
+- Update controls reference text: "HOLD SPACE: Charge Power & Smash | TAP: Soft Drop".
+#### [MODIFY] [ModakBall.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/ModakBall.jsx) / [GameScene.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameScene.jsx)
+- Visual feedback on high-power hits:
+  - Add impact pop flash ring at contact point.
+  - Modak ball trail glow / speed particle effect when traveling at smash speed.
+
+---
+
+## Verification Plan
+
+### Automated Build Verification
+- Run `npm run build` to ensure clean compilation without syntax or bundling errors.
+
+### Interactive Browser Verification
+- Use the browser subagent to run the live dev server (`npm run dev`) and test:
+  1. **Back-of-court Serve**:
+     - Verify player starts at back baseline (`z ≈ 7.6`).
+     - Verify ball hovers directly in front at comfortable hit height.
+     - Verify game stays in "Ready to Serve" state until Space is pressed.
+  2. **Spacebar Charging & Release**:
+     - Verify holding Space shows the arcade charge bar filling green -> orange -> red.
+     - Verify tapping Space creates a soft lob / drop shot landing near the net.
+     - Verify full charge smash creates a fast driving deep ball toward the back line.
+     - Verify jumping when far from ball executes regular jump without charging.
+  3. **Reticle Active Trigger & Auto-Aim**:
+     - Verify reticle illuminates when player enters landing zone.
+     - Verify hitting from reticle zone always arcs over the net cleanly into opponent's half with open-space targeting.
+  4. **AI Behavior**:
+     - Verify opponent serves naturally when opponent scores.
+     - Verify opponent selects drop shot vs smash based on player position.

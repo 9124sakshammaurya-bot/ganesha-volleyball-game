@@ -11,6 +11,9 @@ export function useKeyboardControls() {
     moveRight: false,
     moveForward: false,
     moveBackward: false,
+    spaceDown: false,
+    spacePressed: false,
+    spaceReleased: false,
     spaceTriggered: false,
     resetTriggered: false,
     pauseTriggered: false,
@@ -33,8 +36,11 @@ export function useKeyboardControls() {
         keys.moveBackward = true
       } else if (code === 'Space') {
         event.preventDefault()
-        // Only trigger once per keydown until consumed
-        keys.spaceTriggered = true
+        if (!keys.spaceDown && !event.repeat) {
+          keys.spacePressed = true
+          keys.spaceTriggered = true
+        }
+        keys.spaceDown = true
       } else if (code === 'KeyR') {
         keys.resetTriggered = true
       } else if (code === 'KeyP' || code === 'Escape') {
@@ -42,7 +48,6 @@ export function useKeyboardControls() {
         keys.pauseTriggered = true
       }
     }
-
 
     const handleKeyUp = (event) => {
       const code = event.code
@@ -56,6 +61,10 @@ export function useKeyboardControls() {
         keys.moveForward = false
       } else if (code === 'KeyS' || code === 'ArrowDown') {
         keys.moveBackward = false
+      } else if (code === 'Space') {
+        event.preventDefault()
+        keys.spaceDown = false
+        keys.spaceReleased = true
       }
     }
 

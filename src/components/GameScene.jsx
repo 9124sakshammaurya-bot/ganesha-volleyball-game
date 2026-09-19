@@ -40,8 +40,12 @@ export default function GameScene({
   playerScore = 0,
   difficulty = 'medium',
   concedingSide = 'player',
+  serverSide = 'player',
   roundId = 0,
   onBallGrounded,
+  onServeTriggered,
+  onChargeUpdate,
+  onSpeedUpdate,
   onResetMatch,
   onTogglePause,
 }) {
@@ -49,6 +53,7 @@ export default function GameScene({
   const opponentRef = useRef()
   const ballRef = useRef()
   const reticleRef = useRef()
+  const impactPopRef = useRef()
 
   return (
     <Canvas
@@ -68,19 +73,35 @@ export default function GameScene({
       {/* Real-time Trajectory Landing Indicator on Court Floor */}
       <LandingReticle ref={reticleRef} />
 
+      {/* High-Power Hit Shockwave Pop Ring */}
+      <mesh ref={impactPopRef} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.25, 0.42, 32]} />
+        <meshBasicMaterial
+          color="#fef08a"
+          transparent
+          opacity={0.85}
+          depthWrite={false}
+        />
+      </mesh>
+
       {/* Physics, AI, Reticle Projection, and Gameplay Loop Controller */}
       <GameController
         playerRef={playerRef}
         opponentRef={opponentRef}
         ballRef={ballRef}
         reticleRef={reticleRef}
+        impactPopRef={impactPopRef}
         matchState={matchState}
         isPaused={isPaused}
         playerScore={playerScore}
         difficulty={difficulty}
         concedingSide={concedingSide}
+        serverSide={serverSide}
         roundId={roundId}
         onBallGrounded={onBallGrounded}
+        onServeTriggered={onServeTriggered}
+        onChargeUpdate={onChargeUpdate}
+        onSpeedUpdate={onSpeedUpdate}
         onResetMatch={onResetMatch}
         onTogglePause={onTogglePause}
       />

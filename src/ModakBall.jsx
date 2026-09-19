@@ -110,6 +110,17 @@ const ModakBall = forwardRef(function ModakBall(
           emissiveIntensity={0.5}
         />
       </mesh>
+
+      {/* Smash Speed Aura / Trail Glow */}
+      <mesh name="smashGlow" visible={false}>
+        <sphereGeometry args={[BALL_RADIUS * 1.35, 18, 14]} />
+        <meshBasicMaterial
+          color="#f97316"
+          transparent
+          opacity={0.35}
+          depthWrite={false}
+        />
+      </mesh>
     </group>
   )
 })

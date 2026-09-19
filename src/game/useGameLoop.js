@@ -17,13 +17,14 @@ export function useGameLoop() {
   const [playerScore, setPlayerScore] = useState(0)
   const [opponentScore, setOpponentScore] = useState(0)
   const [targetScore, setTargetScore] = useState(DEFAULT_TARGET_SCORE)
-  const [matchState, setMatchState] = useState('playing') // 'playing' | 'scored' | 'serving' | 'gameOver'
+  const [matchState, setMatchState] = useState('serving') // 'serving' | 'playing' | 'scored' | 'gameOver'
   const [isPaused, setIsPaused] = useState(false)
-  const [roundMessage, setRoundMessage] = useState(null)
+  const [roundMessage, setRoundMessage] = useState('READY TO SERVE (HOLD SPACE)')
   const [winner, setWinner] = useState(null)
   const [difficulty, setDifficulty] = useState('medium')
-  const [concedingSide, setConcedingSide] = useState('player')
-  const [roundId, setRoundId] = useState(0)
+  const [concedingSide, setConcedingSide] = useState('opponent')
+  const [serverSide, setServerSide] = useState('player')
+  const [roundId, setRoundId] = useState(1)
 
   // Ref to hold latest state for use inside callbacks without stale closures
   const stateRef = useRef({
@@ -33,6 +34,7 @@ export function useGameLoop() {
     matchState,
     isPaused,
     difficulty,
+    serverSide,
   })
 
   useEffect(() => {
@@ -43,8 +45,9 @@ export function useGameLoop() {
       matchState,
       isPaused,
       difficulty,
+      serverSide,
     }
-  }, [playerScore, opponentScore, targetScore, matchState, isPaused, difficulty])
+  }, [playerScore, opponentScore, targetScore, matchState, isPaused, difficulty, serverSide])
 
   const timerRef = useRef(null)
 
@@ -74,8 +77,8 @@ export function useGameLoop() {
       Math.abs(ballX) <= IN_BOUNDS_TOLERANCE_X &&
       Math.abs(ballZ) <= IN_BOUNDS_TOLERANCE_Z
 
-    let scoringSide = null
-    let pointMessage = ''
+    let scoringSide
+    let pointMessage
 
     if (!isInBounds) {
       // --- OUT OF BOUNDS HIT ---
@@ -120,6 +123,7 @@ export function useGameLoop() {
     if (scoringSide === 'player') {
       const nextScore = pScore + 1
       setPlayerScore(nextScore)
+      setServerSide('player')
 
       if (nextScore >= currentTarget) {
         setWinner('player')
@@ -131,18 +135,14 @@ export function useGameLoop() {
 
         timerRef.current = setTimeout(() => {
           setMatchState('serving')
-          setRoundMessage('SERVE!')
+          setRoundMessage('READY TO SERVE (HOLD SPACE)')
           setRoundId((prev) => prev + 1)
-
-          timerRef.current = setTimeout(() => {
-            setMatchState('playing')
-            setRoundMessage(null)
-          }, 850)
         }, 1250)
       }
     } else {
       const nextScore = oScore + 1
       setOpponentScore(nextScore)
+      setServerSide('opponent')
 
       if (nextScore >= currentTarget) {
         setWinner('opponent')
@@ -154,16 +154,17 @@ export function useGameLoop() {
 
         timerRef.current = setTimeout(() => {
           setMatchState('serving')
-          setRoundMessage('SERVE!')
+          setRoundMessage('OPPONENT READY TO SERVE...')
           setRoundId((prev) => prev + 1)
-
-          timerRef.current = setTimeout(() => {
-            setMatchState('playing')
-            setRoundMessage(null)
-          }, 850)
         }, 1250)
       }
     }
+  }, [])
+
+  // Transition from serving to active rally
+  const onServeTriggered = useCallback(() => {
+    setMatchState('playing')
+    setRoundMessage(null)
   }, [])
 
   // Toggle pause/resume
@@ -183,15 +184,11 @@ export function useGameLoop() {
     setPlayerScore(0)
     setOpponentScore(0)
     setWinner(null)
-    setConcedingSide('player')
+    setConcedingSide('opponent')
+    setServerSide('player')
     setMatchState('serving')
-    setRoundMessage('READY... SERVE!')
+    setRoundMessage('READY TO SERVE (HOLD SPACE)')
     setRoundId((prev) => prev + 1)
-
-    timerRef.current = setTimeout(() => {
-      setMatchState('playing')
-      setRoundMessage(null)
-    }, 900)
   }, [])
 
   // Change difficulty
@@ -214,8 +211,10 @@ export function useGameLoop() {
     winner,
     difficulty,
     concedingSide,
+    serverSide,
     roundId,
     onBallGrounded,
+    onServeTriggered,
     togglePause,
     resumeGame,
     restartMatch,

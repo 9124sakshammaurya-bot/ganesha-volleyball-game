@@ -1,0 +1,135 @@
+# Implementation Plan: Proximity Auto-Hitting, Progressive Speed Ramp & Full-Stack Leaderboard
+
+This plan outlines the architecture and changes required to transform the hitting mechanics of the Ganesha Volleyball Game to be strictly proximity-based (eliminating manual spacebar hitting), add smooth progressive speed acceleration to the Modak ball, expand the landing zone reticle, and deliver a lightweight full-stack player authentication and leaderboard system.
+
+All existing court dimensions, Modak geometries, and Mushak procedural models will remain strictly intact.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Key Gameplay & Architecture Confirmations**:
+> 1. **Auto-Hit Mechanics**: The hit impulse automatically triggers the instant the Player Mushak steps into the expanded landing reticle / collision zone while the Modak is at hit altitude. No manual spacebar press will be needed during rallies.
+> 2. **Serving Phase**: Serving can be initiated either by pressing `Space`, walking into the serve zone, or clicking a convenient "SERVE" UI button, ensuring zero frustration while keeping rally hits strictly automatic.
+> 3. **Backend Stack**: We will implement an Express.js backend in `server/` leveraging Node 24's native SQLite engine (`node:sqlite`) with persistent file storage and zero external C++ compiler dependencies. We will configure Vite's dev server proxy so all `/api/*` routes route seamlessly to the backend.
+
+---
+
+## Proposed Changes
+
+### 1. Physics & Gameplay Loop (Auto-Hitting & Speed Ramping)
+
+#### [MODIFY] [constants.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/game/constants.js)
+- Expand `RETICLE_TRIGGER_RADIUS` from `2.25` to `3.85` (~1.7x expansion).
+- Expand `HIT_RADIUS` from `1.9` to `3.2` (~1.7x expansion).
+- Define speed ramp constants:
+  - `INITIAL_SPEED_MULTIPLIER = 0.65`
+  - `MAX_SPEED_MULTIPLIER = 1.50`
+  - `SPEED_RAMP_PER_HIT = 0.04` (+4% speed per volley hit)
+  - `SPEED_RAMP_PER_5S = 0.03` (+3% speed every 5 seconds of active rally)
+
+#### [MODIFY] [GameController.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/GameController.jsx)
+- **Proximity-Based Auto-Hitting**:
+  - Replace manual spacebar hit trigger with an automatic trigger: when Player Mushak enters the expanded reticle zone (`distToReticle <= RETICLE_TRIGGER_RADIUS` or `distToBall <= HIT_RADIUS`) and the ball is within playable altitude and heading to player side.
+  - Apply instant smooth leap impulse (`playerVelYRef.current = 4.2`) and fire hit shockwave effect.
+  - Dynamically calculate shot power and target based on player's position, movement direction (A/D lateral bias), and distance to reticle center.
+  - Implement a 0.35s hit cooldown / lastHitter guard to prevent accidental multi-frame double hits.
+- **Progressive Ball Speed Ramping**:
+  - Maintain `speedMultiplier` state (starting at `0.65`).
+  - Scale ball physics time-step by `speedMultiplier` (`ballDelta = delta * speedMultiplier`).
+  - Increment `speedMultiplier` by `+0.04` on every hit (player and opponent) and `+0.03` every 5 seconds of active play, capped at `1.50`.
+  - Reset `speedMultiplier` back to `0.65` upon ball grounding, point scored, or match restart.
+  - Propagate speed multiplier and hit count to HUD for live speed display.
+
+#### [MODIFY] [LandingReticle.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/LandingReticle.jsx)
+- Substantially expand the visual footprint of the reticle to match the new 1.7x trigger zone:
+  - Expand outer ring radius from `0.52` to `0.85`.
+  - Expand trigger aura radius from `0.92` to `1.55`.
+  - Enhance visual feedback (smooth pulsing glow when the player enters the zone).
+
+---
+
+### 2. Frontend UI (Authentication, Leaderboard & HUD)
+
+#### [NEW] [AuthModal.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/AuthModal.jsx)
+- Lightweight, aesthetic pre-game sign-in modal overlay.
+- Fields: Player Username (required) and Email/ID (optional).
+- Quick guest or preset options ("Mushak Ace", "Modak Master", "Temple Champ").
+- Stores profile in `localStorage` under `mushak_player_profile`.
+- Calls `POST /api/players/login` to register/retrieve player stats.
+
+#### [NEW] [LeaderboardModal.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/LeaderboardModal.jsx)
+- Modal / overlay displaying top players and high scores fetched from `GET /api/leaderboard`.
+- Columns: Rank (with medal badges 🥇🥈🥉), Player Name, Matches Won, Total Points, and Win Rate.
+- Refresh button and live stats badge for the currently logged-in player.
+
+#### [MODIFY] [Hud.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/components/Hud.jsx)
+- Add logged-in player profile pill (showing username and avatar/badge, with "Switch Player" option).
+- Add "🏆 Leaderboard" button to the HUD settings bar.
+- Add live "⚡ Ball Speed: 0.65x" / "Rally: N hits" badge that lights up as speed ramps up.
+- Update control hints to reflect auto-hitting: `<kbd>WASD</kbd> Move to Reticle to Auto-Hit!`.
+- Add "View Leaderboard" button to the Game Over victory/defeat screen.
+
+#### [MODIFY] [App.jsx](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/App.jsx)
+- Manage player session state (`player`, `showAuthModal`, `showLeaderboardModal`).
+- Automatically open `AuthModal` on first load if no player is saved in `localStorage`.
+- Hook into match completion (`matchState === 'gameOver'`) to automatically submit match results to `POST /api/scores`.
+
+#### [MODIFY] [App.css](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/src/App.css)
+- Add styling for `AuthModal`, `LeaderboardModal`, speed ramp badge, and player profile chip matching the existing gold/saffron glassmorphic theme.
+
+---
+
+### 3. Backend Setup & Data Persistence
+
+#### [NEW] [server/index.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/server/index.js)
+- Express.js application listening on port `3001`.
+- CORS and JSON body parser middleware.
+- API Endpoints:
+  - `POST /api/players/login`: Create or retrieve a player profile.
+  - `POST /api/scores`: Save player match results (playerScore, opponentScore, targetScore, won, difficulty).
+  - `GET /api/leaderboard`: Retrieve top ranked players sorted by match wins and score.
+
+#### [NEW] [server/db.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/server/db.js)
+- Native SQLite database initialization using Node 24's built-in `node:sqlite`.
+- Stores data in `server/data/volleyball.db`.
+- Schema:
+  - `players` (id, username, email, created_at)
+  - `scores` (id, player_id, player_username, player_score, opponent_score, target_score, won, difficulty, created_at)
+- Pre-seeds a few friendly rival scores (e.g. "Ganesha_Devotee", "Mushak_Rider") so the leaderboard feels alive immediately.
+
+#### [MODIFY] [vite.config.js](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/vite.config.js)
+- Configure dev server proxy for `/api` -> `http://localhost:3001`.
+
+#### [MODIFY] [package.json](file:///c:/Users/Saksham/OneDrive/Desktop/ganesha-vollyball-game/package.json)
+- Add `express` and `cors` to dependencies.
+- Add scripts `"server": "node server/index.js"` and `"dev:all": "concurrently \"npm run server\" \"vite\""`.
+
+---
+
+## Verification Plan
+
+### Automated Verification
+1. **Server API Validation**:
+   - Run a test script against `POST /api/players/login`, `POST /api/scores`, and `GET /api/leaderboard` to ensure valid HTTP status codes and correct database mutations.
+2. **Build and Lint**:
+   - Run `npm run build` to verify there are no TypeScript/JSX syntax errors or missing imports.
+   - Run `npm run lint` to ensure clean code standards.
+
+### Manual / Browser Verification
+1. **Sign-In Flow**:
+   - Verify that the Sign-In modal appears on clean launch.
+   - Test logging in as a new user and verify profile persistence across browser refreshes.
+2. **Proximity-Based Auto-Hitting**:
+   - Launch match and move player into the expanded landing reticle without touching `Space`.
+   - Confirm player leaps and executes the shot cleanly toward the opponent court upon entering the reticle.
+   - Confirm no multi-hit glitch occurs.
+3. **Progressive Speed Ramp**:
+   - Verify that the Modak begins at 0.65x speed.
+   - Observe the speed increase (+4% per hit) as a rally continues.
+   - Verify that when a point is scored, speed resets back to 0.65x.
+4. **Leaderboard & Score Submission**:
+   - Complete a match (e.g., target score 3).
+   - Verify the score is submitted to `POST /api/scores`.
+   - Open the Leaderboard modal and verify the updated ranking and win count.

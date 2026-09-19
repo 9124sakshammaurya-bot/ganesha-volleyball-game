@@ -36,11 +36,31 @@ export const PLAYER_SPEED = 7.5
 export const PLAYER_JUMP_IMPULSE = 7.8
 
 
-// Hitting Mechanics
-export const HIT_RADIUS = 1.85
+// Serve Positions & Setup
+export const SERVE_PLAYER_POS = [0, FLOOR_Y, 7.6]
+export const SERVE_OPPONENT_POS = [0, FLOOR_Y, -7.6]
+export const SERVE_BALL_OFFSET_Z = 1.15
+export const SERVE_BALL_HEIGHT = 1.45
+
+// Hitting Mechanics & Power Modulation (Expanded Collision Tolerances)
+export const HIT_RADIUS = 3.2 // Expanded collision radius (~1.7x from 1.9)
 export const HIT_IMPULSE_Y = 9.2
 export const HIT_IMPULSE_Z = -11.6 // Upward and forward towards opponent court
 export const HIT_LATERAL_FACTOR = 2.8 // Directs the ball left/right based on hit offset
+
+// Progressive Ball Speed Ramping Constants
+export const INITIAL_SPEED_MULTIPLIER = 0.65 // Reduced initial velocity scaling
+export const MAX_SPEED_MULTIPLIER = 1.50     // Speed cap
+export const SPEED_RAMP_PER_HIT = 0.04       // +4% acceleration per hit
+export const SPEED_RAMP_PER_5S = 0.03        // +3% gradual acceleration per 5s rally
+
+// Proximity-Based Auto-Aim & Landing Reticle
+export const MAX_CHARGE_TIME = 0.65 // Maximum seconds to reach 100% serve power
+export const MIN_HIT_POWER = 0.35   // Soft lob / drop shot
+export const MAX_HIT_POWER = 1.0    // Full-power smash / spike
+export const RETICLE_TRIGGER_RADIUS = 3.85 // Expanded landing radius (~1.7x from 2.25)
+export const PLAYABLE_HIT_MIN_Y = 0.40
+export const PLAYABLE_HIT_MAX_Y = 4.2
 
 // Boundaries
 export const PLAYER_BOUNDS = {
@@ -119,6 +139,80 @@ export function predictLandingPoint(ballPos, ballVel, floorY = FLOOR_Y, gravity 
     z: landZ,
     timeToLand: t,
     height: deltaY,
+  }
+}
+
+/**
+ * Calculates optimal velocity (vx, vy, vz) to launch the ball from current position
+ * to a target landing coordinate (targetX, targetZ) on the opponent court.
+ * Mathematically guarantees net clearance (above NET_TOP_Y) without backward misfires.
+ * Modulates flight speed and arc height according to shot power (MIN_HIT_POWER .. MAX_HIT_POWER).
+ */
+export function calculateTrajectoryVelocity(
+  ballPos,
+  targetX,
+  targetZ,
+  power = 0.5,
+  gravity = GRAVITY,
+  netTopY = NET_TOP_Y,
+  floorY = FLOOR_Y
+) {
+  const targetY = floorY + BALL_RADIUS
+  const y0 = Math.max(floorY + BALL_RADIUS, ballPos.y)
+  const z0 = ballPos.z
+  const x0 = ballPos.x
+
+  // Ensure targetZ is strictly on the other side of the net
+  const hittingTowardOpponent = z0 >= 0
+  const validTargetZ = hittingTowardOpponent
+    ? Math.min(-1.5, targetZ)
+    : Math.max(1.5, targetZ)
+
+  const distZ = validTargetZ - z0
+  // Ratio along flight path where the ball crosses the net plane (z = 0)
+  const rNet = -z0 / distZ
+
+  // Net clearance requirement:
+  // Lower power = slightly loftier arc over net (~0.6m)
+  // Higher power = driving arc (~0.42m)
+  const netClearance = 0.42 + (1.0 - Math.min(1.0, Math.max(0.1, power))) * 0.3
+  const yReqNet = netTopY + netClearance
+
+  let T = 0.85
+
+  if (rNet > 0.05 && rNet < 0.95) {
+    // Parabolic fit through (0, y0), (rNet * T, yReqNet), and (T, targetY)
+    const num = (yReqNet - y0) - rNet * (targetY - y0)
+    const denom = 0.5 * gravity * rNet * (rNet - 1.0)
+    if (denom !== 0 && (num / denom) > 0) {
+      const tBase = Math.sqrt(num / denom)
+      // Speed factor based on power: high power accelerates flight, low power relaxes flight
+      const speedFactor = 0.74 + (1.0 - power) * 0.42
+      T = Math.max(0.48, Math.min(1.35, tBase * speedFactor))
+    }
+  }
+
+  // Calculate base vy to reach targetY at time T
+  let vy = (targetY - y0 - 0.5 * gravity * T * T) / T
+
+  // Safeguard: explicitly ensure height at net crossing exceeds NET_TOP_Y + minimum clearance
+  if (rNet > 0.05 && rNet < 0.95) {
+    const tNet = rNet * T
+    const minNetY = netTopY + 0.35
+    const yAtNet = y0 + vy * tNet + 0.5 * gravity * tNet * tNet
+    if (yAtNet < minNetY) {
+      vy = (minNetY - y0 - 0.5 * gravity * tNet * tNet) / tNet
+    }
+  }
+
+  const vz = distZ / T
+  const vx = (targetX - x0) / T
+
+  return {
+    vx,
+    vy,
+    vz,
+    flightTime: T,
   }
 }
 
